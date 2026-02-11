@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Time Pass - Ultimate</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <style>
+        .wa-green { background-color: #075e54; }
+        .hidden { display: none !important; }
+        .chat-bg { background-color: #e5ddd5; background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png'); }
+        .btn-gold { background: linear-gradient(45deg, #FFD700, #FFA500); color: black; font-weight: 800; }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden bg-gray-50">
+
+    <div id="login" class="fixed inset-0 z-[5000] wa-green flex flex-col items-center justify-center p-6 text-white">
+        <h1 class="text-5xl font-black mb-10 italic text-yellow-400">Time Pass</h1>
+        <input type="text" id="username" placeholder="আপনার নাম..." class="w-full max-w-xs p-4 rounded-2xl mb-4 text-black font-bold text-center border-none outline-none shadow-xl">
+        <button onclick="loginUser()" class="w-full max-w-xs bg-white text-[#075e54] py-4 rounded-2xl font-black text-xl shadow-2xl active:scale-95 transition">লগইন করুন</button>
+        <button onclick="openAdminPortal()" class="mt-20 opacity-30 text-xs">ADMIN LOGIN</button>
+    </div>
+
+    <div id="app" class="hidden flex flex-col h-screen">
+        <header class="wa-green p-4 flex justify-between items-center text-white shadow-lg">
+            <h1 class="text-xl font-bold italic">Time Pass</h1>
+            <div id="timer" class="bg-yellow-400 text-black px-3 py-1 rounded-full text-[10px] font-bold italic">চেকিং...</div>
+        </header>
+        
+        <div id="userList" class="flex-1 overflow-y-auto p-4 space-y-3 bg-white"></div>
+
+        <div class="p-4 bg-white border-t space-y-2">
+            <button onclick="showPayModal()" class="btn-gold w-full py-4 rounded-2xl shadow-xl flex items-center justify-center space-x-2 active:scale-95 transition">
+                <span>💎</span> <span>রিচার্জ / পেমেন্ট করুন</span>
+            </button>
+            <button onclick="showHelp()" class="w-full py-2 text-gray-400 text-xs font-bold italic">হেল্প সেন্টার</button>
+        </div>
+    </div>
+
+    <div id="payModal" class="hidden fixed inset-0 z-[6000] bg-black/90 flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-sm rounded-[40px] p-6 text-center">
+            <h2 class="text-xl font-black mb-4 text-green-700 italic underline">পেমেন্ট মেথড</h2>
+            <div class="bg-gray-100 p-4 rounded-3xl mb-4 border-2 border-dashed border-green-500">
+                <img id="qrImg" class="w-48 h-48 mx-auto hidden rounded-lg shadow-md">
+                <p id="qrAlt" class="py-10 text-xs text-gray-500 italic font-bold">অ্যাডমিন কিউআর কোড আপডেট করছে...</p>
+            </div>
+            <p class="text-[10px] text-red-500 mb-4 font-bold uppercase italic">স্ক্যান করুন এবং স্ক্রিনশট আপলোড দিন</p>
+            <input type="file" id="payFile" class="hidden" onchange="submitPayment()">
+            <button onclick="document.getElementById('payFile').click()" class="w-full bg-[#075e54] text-white py-4 rounded-2xl font-bold shadow-lg active:scale-95 transition">স্ক্রিনশট আপলোড করুন</button>
+            <button onclick="hidePayModal()" class="mt-4 text-gray-400 text-xs font-bold underline">বন্ধ করুন</button>
+        </div>
+    </div>
+
+    <div id="adminPanel" class="hidden fixed inset-0 z-[9999] bg-gray-100 flex flex-col">
+        <div class="bg-black p-4 text-white flex justify-between items-center">
+            <h2 class="font-bold">ADMIN PANEL (MASTER)</h2>
+            <button onclick="closeAdminPortal()" class="text-red-500 font-bold">LogOut</button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-4 space-y-6">
+            <div class="bg-white p-4 rounded-2xl shadow">
+                <h3 class="font-bold mb-2">১. কিউআর কোড সেট করুন</h3>
+                <input type="file" id="adminQRInput" onchange="uploadAdminQR()" class="text-xs">
+            </div>
+            <div class="bg-white p-4 rounded-2xl shadow">
+                <h3 class="font-bold mb-4 text-blue-600 italic">২. পেমেন্ট রিকোয়েস্ট (Approve)</h3>
+                <div id="adminPaymentList" class="space-y-4"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="helpBox" class="hidden fixed inset-0 z-[7000] bg-white flex flex-col">
+        <div class="wa-green p-4 flex items-center text-white shadow-md">
+            <button onclick="hideHelp()" class="mr-4 text-xl">←</button>
+            <h2 class="font-bold">হেল্প সেন্টার</h2>
+        </div>
+        <div id="helpMsgs" class="flex-1 overflow-y-auto p-4 flex flex-col space-y-3 chat-bg"></div>
+        <div class="p-3 bg-gray-100 flex items-center space-x-2">
+            <input type="text" id="helpInput" placeholder="সমস্যার কথা লিখুন..." class="flex-1 p-3 rounded-full border outline-none">
+            <button onclick="sendHelpTxt()" class="bg-[#075e54] text-white p-3 rounded-full">➤</button>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyD4L7F16TBVxYlPBcL-W1PCvibDmW48MRc",
+            authDomain: "sasta-bazaar-5a1f6.firebaseapp.com",
+            databaseURL: "https://sasta-bazaar-5a1f6-default-rtdb.firebaseio.com",
+            projectId: "sasta-bazaar-5a1f6",
+            storageBucket: "sasta-bazaar-5a1f6.firebasestorage.app",
+            messagingSenderId: "109171472455",
+            appId: "1:109171472455:web:16e6e5ac9d6c63e30a5962"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let me = ""; let expiry = 0;
+
+        function loginUser() {
+            me = document.getElementById('username').value.trim();
+            if(!me) return alert("নাম দিন");
+
+            db.ref("users/"+me).once("value", s => {
+                let d = s.val(); let now = Date.now();
+                if(!d) {
+                    expiry = now + 300000; // 5 mins trial
+                    db.ref("users/"+me).set({ name: me, expiry: expiry, deleteAt: now + 43200000, online: true });
+                } else {
+                    expiry = d.expiry;
+                }
+                document.getElementById('login').classList.add('hidden');
+                document.getElementById('app').classList.remove('hidden');
+                initApp();
+            });
+        }
+
+        function initApp() {
+            setInterval(() => {
+                let now = Date.now();
+                const timer = document.getElementById('timer');
+                if(expiry > now) {
+                    timer.innerText = "সময় বাকি: " + Math.floor((expiry - now)/60000) + " মিঃ";
+                } else {
+                    timer.innerText = "মেয়াদ শেষ! রিচার্জ করুন";
+                    timer.className = "bg-red-600 text-white px-3 py-1 rounded-full text-[10px] font-bold italic";
+                }
+            }, 1000);
+            loadUsers(); loadQR(); loadHelpMsgs();
+        }
+
+        // --- PAYMENT SYSTEM ---
+        function showPayModal() { document.getElementById('payModal').classList.remove('hidden'); }
+        function hidePayModal() { document.getElementById('payModal').classList.add('hidden'); }
+
+        function submitPayment() {
+            const file = document.getElementById('payFile').files[0];
+            const reader = new FileReader();
+            reader.onload = e => {
+                db.ref("recharges/"+me).set({ user: me, screenshot: e.target.result, status: 'pending', time: Date.now() });
+                alert("আপনার স্ক্রিনশট অ্যাডমিনকে পাঠানো হয়েছে! এপ্রুভাল এর জন্য অপেক্ষা করুন।");
+                hidePayModal();
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function loadQR() {
+            db.ref("admin/qr").on("value", s => {
+                if(s.val()){
+                    document.getElementById('qrImg').src = s.val();
+                    document.getElementById('qrImg').classList.remove('hidden');
+                    document.getElementById('qrAlt').classList.add('hidden');
+                }
+            });
+        }
+
+        // --- ADMIN PANEL CONTROLS ---
+        function openAdminPortal() {
+            const pass = prompt("অ্যাডমিন পাসওয়ার্ড দিন:");
+            if(pass === "787648255") {
+                document.getElementById('adminPanel').classList.remove('hidden');
+                loadAdminData();
+            } else {
+                alert("ভুল পাসওয়ার্ড!");
+            }
+        }
+        function closeAdminPortal() { document.getElementById('adminPanel').classList.add('hidden'); }
+
+        function uploadAdminQR() {
+            const file = document.getElementById('adminQRInput').files[0];
+            const reader = new FileReader();
+            reader.onload = e => db.ref("admin/qr").set(e.target.result);
+            reader.readAsDataURL(file);
+        }
+
+        function loadAdminData() {
+            db.ref("recharges").on("value", s => {
+                const list = document.getElementById('adminPaymentList');
+                list.innerHTML = "";
+                s.forEach(child => {
+                    const data = child.val();
+                    list.innerHTML += `
+                    <div class="p-3 bg-gray-50 border-2 rounded-xl">
+                        <p class="font-bold text-sm">ইউজার: ${data.user}</p>
+                        <img src="${data.screenshot}" class="w-full h-40 object-cover my-2 rounded-lg border">
+                        <button onclick="approveUser('${data.user}')" class="bg-green-600 text-white w-full py-2 rounded-lg font-bold">এপ্রুভ করুন (১ ঘণ্টা সময়)</button>
+                        <button onclick="db.ref('recharges/${data.user}').remove()" class="mt-2 text-red-500 text-[10px] w-full text-center italic">বাতিল করুন</button>
+                    </div>`;
+                });
+            });
+        }
+
+        function approveUser(userName) {
+            db.ref("users/"+userName).once("value", s => {
+                let currentExpiry = s.val().expiry || Date.now();
+                let newExpiry = currentExpiry + 3600000; // ১ ঘণ্টা যোগ হলো
+                db.ref("users/"+userName+"/expiry").set(newExpiry);
+                db.ref("recharges/"+userName).remove();
+                alert(userName + "-এর রিচার্জ এপ্রুভ হয়েছে!");
+            });
+        }
+
+        // --- HELP SYSTEM ---
+        function showHelp() { document.getElementById('helpBox').classList.remove('hidden'); }
+        function hideHelp() { document.getElementById('helpBox').classList.add('hidden'); }
+        function sendHelpTxt() {
+            const i = document.getElementById('helpInput'); if(!i.value) return;
+            db.ref("help/"+me).push({ from: me, msg: i.value, type: 'text' });
+            i.value = "";
+        }
+        function loadHelpMsgs() {
+            db.ref("help/"+me).on("value", s => {
+                const b = document.getElementById('helpMsgs'); b.innerHTML = "";
+                s.forEach(m => {
+                    const d = m.val();
+                    b.innerHTML += `<div onclick="db.ref('help/${me}/${m.key}').remove()" class="p-3 max-w-[80%] rounded-2xl text-sm mb-2 cursor-pointer shadow-sm ${d.from === me ? 'bg-[#dcf8c6] self-end rounded-tr-none' : 'bg-white self-start rounded-tl-none'}">
+                        ${d.msg}
+                    </div>`;
+                });
+                b.scrollTop = b.scrollHeight;
+            });
+        }
+
+        function loadUsers() {
+            db.ref("users").on("value", s => {
+                const l = document.getElementById('userList'); l.innerHTML = "";
+                s.forEach(u => {
+                    if(u.key !== me) l.innerHTML += `<div class="p-4 bg-white rounded-2xl flex items-center justify-between border mb-3 shadow-sm active:scale-95 transition">
+                        <div class="flex items-center"><div class="w-10 h-10 wa-green rounded-full flex items-center justify-center text-white font-bold">${u.key[0]}</div><span class="ml-3 font-bold">${u.key}</span></div>
+                        <div class="bg-gray-100 p-2 rounded-full opacity-30">📞</div>
+                    </div>`;
+                });
+            });
+        }
+    </script>
+</body>
+</html>
