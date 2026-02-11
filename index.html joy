@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Time Pass - Live Sync</title>
+    
+    <link rel="manifest" href="data:application/json;base64,ewogICJuYW1lIjogIlRpbWUgUGFzcyIsCiAgInNob3J0X25hbWUiIjogIlRpbWVQYXNzIiwKICAic3RhcnRfdXJsIjogIi4vIiwKICAiZGlzcGxheSI6ICJzdGFuZGFsb25lIiwKICAiYmFja2dyb3VuZF9jb2xvciI6ICIjMDc1ZTU0IiwKICAidGhlbWVfY29sb3IiOiAiIzA3NWU1NCIKfQ==">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <style>
+        .wa-green { background-color: #075e54; }
+        .hidden { display: none !important; }
+        .chat-bg { background-color: #e5ddd5; background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png'); }
+        .btn-gold { background: linear-gradient(45deg, #FFD700, #FFA500); color: black; font-weight: 800; }
+        .typing { font-style: italic; color: #25d366; font-size: 10px; }
+        .msg-status { font-size: 10px; margin-left: 5px; }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden bg-gray-100">
+
+    <div id="pwaBar" class="hidden bg-yellow-400 p-3 text-center text-xs font-bold flex justify-between items-center px-6 shadow-xl z-[9999]">
+        <span>Time Pass অ্যাপটি ফোনে ডাউনলোড করুন</span>
+        <button id="pwaBtn" class="bg-black text-white px-4 py-1 rounded-full">ইন্সটল</button>
+    </div>
+
+    <div id="login" class="fixed inset-0 z-[5000] wa-green flex flex-col items-center justify-center p-6 text-white text-center">
+        <h1 class="text-6xl font-black mb-2 italic">Time Pass</h1>
+        <p class="text-[10px] mb-8 tracking-[4px] opacity-70 uppercase font-bold">Real-Time Voice & Chat</p>
+        <input type="text" id="username" placeholder="আপনার নাম লিখুন..." class="w-full max-w-xs p-4 rounded-2xl mb-4 text-black font-bold text-center outline-none shadow-2xl">
+        <button onclick="loginUser()" class="w-full max-w-xs bg-[#25d366] py-4 rounded-2xl font-black text-xl shadow-xl active:scale-95 transition">লগইন</button>
+        <button onclick="openAdmin()" class="mt-20 opacity-20 text-[10px] underline uppercase">Master Admin</button>
+    </div>
+
+    <div id="app" class="hidden flex flex-col h-screen">
+        <header class="wa-green p-4 flex justify-between items-center text-white shadow-lg">
+            <h1 class="text-xl font-bold italic">Time Pass</h1>
+            <div id="timer" class="bg-black/20 px-3 py-1 rounded-full text-[10px] font-bold text-yellow-300 italic">লোড হচ্ছে...</div>
+        </header>
+        
+        <div id="userList" class="flex-1 overflow-y-auto p-4 space-y-3 bg-white">
+            <p class="text-center text-gray-400 mt-20 italic font-bold">অনলাইন মেম্বার খোঁজা হচ্ছে...</p>
+        </div>
+
+        <div class="p-4 bg-white border-t">
+            <button onclick="showRechargeModal()" class="btn-gold w-full py-4 rounded-2xl shadow-xl flex items-center justify-center space-x-2 active:scale-95 transition">
+                <span>💎</span> <span>রিচার্জ / প্যাকেজ কিনুন</span>
+            </button>
+        </div>
+    </div>
+
+    <div id="chatBox" class="hidden fixed inset-0 z-[6000] bg-white flex flex-col">
+        <div class="wa-green p-4 flex items-center text-white justify-between shadow-md">
+            <div class="flex items-center">
+                <button onclick="hideChat()" class="mr-4 text-xl">←</button>
+                <div>
+                    <h2 id="chatTarget" class="font-bold">Chat</h2>
+                    <p id="typingDisplay" class="typing h-3"></p>
+                </div>
+            </div>
+            <div class="flex space-x-4">
+                <button onclick="startVoiceCall()" class="text-xl">📞</button>
+                <button onclick="startVideoCall()" class="text-xl">📷</button>
+            </div>
+        </div>
+        <div id="msgs" class="flex-1 overflow-y-auto p-4 flex flex-col space-y-3 chat-bg"></div>
+        <div class="p-3 bg-gray-100 flex items-center space-x-2 border-t">
+            <input type="file" id="chatImg" class="hidden" onchange="sendPhoto()">
+            <button onclick="document.getElementById('chatImg').click()" class="text-2xl opacity-60">🖼️</button>
+            <input type="text" id="msgInput" oninput="updateTyping()" placeholder="মেসেজ লিখুন..." class="flex-1 p-3 rounded-full border outline-none text-sm">
+            <button onclick="sendTxt()" class="bg-[#075e54] text-white p-3 rounded-full">➤</button>
+        </div>
+    </div>
+
+    <div id="callScreen" class="hidden fixed inset-0 z-[9000] bg-black/90 flex flex-col items-center justify-center text-white">
+        <div class="w-32 h-32 wa-green rounded-full flex items-center justify-center text-4xl font-bold mb-4 animate-pulse">📞</div>
+        <h2 id="callTargetName" class="text-2xl font-bold mb-2">User</h2>
+        <p class="text-yellow-400 mb-10">Calling...</p>
+        <button onclick="endCall()" class="bg-red-600 px-10 py-4 rounded-full font-bold">End Call</button>
+        <audio id="localAudio" autoplay muted class="hidden"></audio>
+        <audio id="remoteAudio" autoplay class="hidden"></audio>
+    </div>
+
+    <div id="rechargeModal" class="hidden fixed inset-0 z-[8000] bg-black/80 flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-sm rounded-[30px] p-6 text-center">
+            <h2 class="text-2xl font-black mb-6 text-red-600 italic">প্যাকেজ রিচার্জ</h2>
+            <div class="space-y-3 mb-6">
+                <button onclick="setPlan('১ ঘণ্টা - ৳৩০')" class="w-full p-3 border rounded-xl font-bold hover:bg-yellow-50">১ ঘণ্টা - ৳৩০</button>
+                <button onclick="setPlan('২ ঘণ্টা - ৳৫০')" class="w-full p-3 border rounded-xl font-bold hover:bg-yellow-50">২ ঘণ্টা - ৳৫০</button>
+                <button onclick="setPlan('১২ ঘণ্টা - ৳১০০')" class="w-full p-3 border rounded-xl font-bold hover:bg-yellow-50">১২ ঘণ্টা - ৳১০০</button>
+            </div>
+            <div id="qrArea" class="bg-gray-100 p-2 rounded-2xl mb-6">
+                <img id="qrImg" class="w-40 h-40 mx-auto hidden">
+                <p id="qrAlt" class="py-10 text-xs text-gray-400 italic">স্ক্যানার আপডেট হচ্ছে...</p>
+            </div>
+            <input type="file" id="payFile" class="hidden" onchange="uploadPayProof()">
+            <button id="uploadBtn" onclick="document.getElementById('payFile').click()" class="hidden w-full bg-[#075e54] text-white py-4 rounded-xl font-bold">স্ক্রিনশট আপলোড দিন</button>
+            <button onclick="closeRechargeModal()" class="mt-4 text-xs font-bold text-gray-400">বন্ধ করুন</button>
+        </div>
+    </div>
+
+    <div id="adminPanel" class="hidden fixed inset-0 z-[9999] bg-gray-50 flex flex-col p-4 overflow-y-auto">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="font-black text-red-600">MASTER ADMIN</h2>
+            <button onclick="location.reload()" class="bg-black text-white px-4 py-1 rounded text-xs">EXIT</button>
+        </div>
+        <div class="bg-white p-4 rounded-xl shadow mb-6">
+            <p class="text-[10px] font-bold mb-2">QR Code Update</p>
+            <input type="file" onchange="updateQR(this)">
+        </div>
+        <div id="adminInbox" class="space-y-4"></div>
+        <div id="adminUsers" class="mt-10 space-y-2"></div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyD4L7F16TBVxYlPBcL-W1PCvibDmW48MRc",
+            authDomain: "sasta-bazaar-5a1f6.firebaseapp.com",
+            databaseURL: "https://sasta-bazaar-5a1f6-default-rtdb.firebaseio.com",
+            projectId: "sasta-bazaar-5a1f6",
+            storageBucket: "sasta-bazaar-5a1f6.firebasestorage.app",
+            messagingSenderId: "109171472455",
+            appId: "1:109171472455:web:16e6e5ac9d6c63e30a5962"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let me = ""; let target = ""; let expiry = 0; let selectedPlan = ""; let typingTimeout;
+
+        // --- PWA Download ---
+        let pwaPrompt;
+        window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); pwaPrompt = e; document.getElementById('pwaBar').classList.remove('hidden'); });
+        document.getElementById('pwaBtn').addEventListener('click', () => { if(pwaPrompt){ pwaPrompt.prompt(); document.getElementById('pwaBar').classList.add('hidden'); }});
+
+        // --- Auth & Session ---
+        function loginUser() {
+            me = document.getElementById('username').value.trim();
+            if(!me) return alert("নাম দিন!");
+            db.ref("users/"+me).once("value", s => {
+                let d = s.val(); let now = Date.now();
+                if(!d) {
+                    expiry = now + 300000;
+                    db.ref("users/"+me).set({ name: me, expiry: expiry, deleteAt: now+43200000, online: true });
+                } else {
+                    expiry = d.expiry;
+                    if(now > d.deleteAt) { db.ref("users/"+me).remove(); location.reload(); return; }
+                }
+                document.getElementById('login').classList.add('hidden');
+                document.getElementById('app').classList.remove('hidden');
+                startApp();
+            });
+        }
+
+        function startApp() {
+            setInterval(() => {
+                let now = Date.now();
+                const t = document.getElementById('timer');
+                db.ref("users/"+me+"/expiry").on("value", s => { expiry = s.val(); });
+                if(expiry > now) {
+                    let d = expiry - now;
+                    t.innerText = "Time: " + Math.floor(d/60000) + "m " + Math.floor((d%60000)/1000) + "s";
+                } else { t.innerText = "EXPIRED"; t.style.color = "red"; }
+                db.ref("users/"+me).onDisconnect().remove();
+            }, 1000);
+            loadUsers(); loadQR(); loadCallListener();
+        }
+
+        // --- Real-time User List ---
+        function loadUsers() {
+            db.ref("users").on("value", s => {
+                const list = document.getElementById('userList'); list.innerHTML = "";
+                s.forEach(u => {
+                    if(u.key === me) return;
+                    list.innerHTML += `<div onclick="showChat('${u.key}')" class="p-4 bg-white rounded-3xl flex items-center justify-between border shadow-sm active:scale-95 transition cursor-pointer">
+                        <div class="flex items-center">
+                            <div class="w-12 h-12 wa-green rounded-full flex items-center justify-center text-white font-black">${u.key[0]}</div>
+                            <div class="ml-4"><p class="font-bold">${u.key}</p><p class="text-[9px] text-green-500 font-bold italic">● Online</p></div>
+                        </div>
+                        <div class="bg-gray-100 p-3 rounded-full">💬</div>
+                    </div>`;
+                });
+            });
+        }
+
+        // --- Chat & Typing Status ---
+        function showChat(user) {
+            target = user;
+            document.getElementById('chatBox').classList.remove('hidden');
+            document.getElementById('chatTarget').innerText = target;
+            loadMessages();
+            listenTyping();
+        }
+        function hideChat() { document.getElementById('chatBox').classList.add('hidden'); }
+
+        function updateTyping() {
+            db.ref("typing/"+me).set(target);
+            clearTimeout(typingTimeout);
+            typingTimeout = setTimeout(() => { db.ref("typing/"+me).remove(); }, 2000);
+        }
+
+        function listenTyping() {
+            db.ref("typing/"+target).on("value", s => {
+                document.getElementById('typingDisplay').innerText = (s.val() === me) ? "typing..." : "";
+            });
+        }
+
+        function sendTxt() {
+            const i = document.getElementById('msgInput'); if(!i.value) return;
+            const msgKey = db.ref("chats").push().key;
+            db.ref("chats/"+getChatID()).child(msgKey).set({ from: me, msg: i.value, status: 'sent', time: Date.now() });
+            i.value = "";
+        }
+
+        function sendPhoto() {
+            if(Date.now() > expiry) return alert("রিচার্জ করুন!");
+            const file = document.getElementById('chatImg').files[0];
+            const reader = new FileReader();
+            reader.onload = e => {
+                db.ref("chats/"+getChatID()).push({ from: me, img: e.target.result, status: 'sent', time: Date.now() });
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function loadMessages() {
+            db.ref("chats/"+getChatID()).on("value", s => {
+                const box = document.getElementById('msgs'); box.innerHTML = "";
+                s.forEach(m => {
+                    const d = m.val();
+                    if(d.from !== me && d.status !== 'seen') db.ref("chats/"+getChatID()+"/"+m.key).update({status: 'seen'});
+                    
+                    let statusIcon = d.status === 'seen' ? '<span class="text-blue-400 msg-status">✔✔</span>' : '<span class="text-gray-400 msg-status">✔</span>';
+                    let content = d.img ? `<img src="${d.img}" class="rounded-lg max-w-[200px]">` : d.msg;
+                    
+                    box.innerHTML += `<div class="p-3 max-w-[80%] rounded-2xl text-sm mb-1 ${d.from === me ? 'bg-[#dcf8c6] self-end rounded-tr-none' : 'bg-white self-start rounded-tl-none'} shadow-sm">
+                        ${content} ${d.from === me ? statusIcon : ''}
+                    </div>`;
+                });
+                box.scrollTop = box.scrollHeight;
+            });
+        }
+
+        function getChatID() { return me < target ? me+"_"+target : target+"_"+me; }
+
+        // --- Voice Calling (WebRTC Simulation for Real-time Connection) ---
+        async function startVoiceCall() {
+            if(Date.now() > expiry) return alert("রিচার্জ করুন!");
+            document.getElementById('callScreen').classList.remove('hidden');
+            document.getElementById('callTargetName').innerText = target;
+            
+            // Microphone Access
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                document.getElementById('localAudio').srcObject = stream;
+                db.ref("calls/"+target).set({ caller: me, type: 'voice', status: 'ringing' });
+            } catch(e) { alert("মাইক্রোফোন এক্সেস দিন!"); endCall(); }
+        }
+
+        function loadCallListener() {
+            db.ref("calls/"+me).on("value", s => {
+                const call = s.val();
+                if(call && call.status === 'ringing') {
+                    if(confirm(call.caller + " আপনাকে কল দিচ্ছে... রিসিভ করবেন?")) {
+                        db.ref("calls/"+me).update({status: 'accepted'});
+                        document.getElementById('callScreen').classList.remove('hidden');
+                        document.getElementById('callTargetName').innerText = call.caller;
+                    } else { db.ref("calls/"+me).remove(); }
+                }
+            });
+        }
+
+        function endCall() {
+            db.ref("calls/"+target).remove();
+            db.ref("calls/"+me).remove();
+            document.getElementById('callScreen').classList.add('hidden');
+            const stream = document.getElementById('localAudio').srcObject;
+            if(stream) stream.getTracks().forEach(track => track.stop());
+        }
+
+        // --- Recharge & Admin ---
+        function showRechargeModal() { document.getElementById('rechargeModal').classList.remove('hidden'); }
+        function closeRechargeModal() { document.getElementById('rechargeModal').classList.add('hidden'); }
+        function setPlan(p) { selectedPlan = p; document.getElementById('uploadBtn').classList.remove('hidden'); alert(p + " সিলেক্ট হয়েছে। এবার পেমেন্ট স্ক্রিনশট দিন।"); }
+        function uploadPayProof() {
+            const f = document.getElementById('payFile').files[0];
+            const r = new FileReader();
+            r.onload = e => { db.ref("recharges/"+me).set({ user: me, plan: selectedPlan, img: e.target.result }); alert("অ্যাডমিনকে পাঠানো হয়েছে!"); closeRechargeModal(); };
+            r.readAsDataURL(f);
+        }
+        function loadQR() { db.ref("admin/qr").on("value", s => { if(s.val()){ document.getElementById('qrImg').src = s.val(); document.getElementById('qrImg').classList.remove('hidden'); document.getElementById('qrAlt').classList.add('hidden'); }}); }
+        function openAdmin() { if(prompt("Pass?") === "787648255") { document.getElementById('adminPanel').classList.remove('hidden'); loadAdmin(); } }
+        function loadAdmin() {
+            db.ref("recharges").on("value", s => {
+                const box = document.getElementById('adminInbox'); box.innerHTML = "";
+                s.forEach(p => { const d = p.val(); box.innerHTML += `<div class="bg-white p-3 rounded shadow mb-3"><p class="text-xs font-bold">${d.user} - ${d.plan}</p><img src="${d.img}" class="w-full h-32 object-cover my-2"><button onclick="approve('${d.user}', '${d.plan}')" class="bg-green-500 text-white w-full py-2 rounded text-xs">APPROVE</button></div>`; });
+            });
+        }
+        function approve(u, p) {
+            let add = p.includes("১") ? 3600000 : p.includes("২") ? 7200000 : 43200000;
+            db.ref("users/"+u).once("value", s => { db.ref("users/"+u).update({ expiry: (s.val().expiry || Date.now()) + add }); db.ref("recharges/"+u).remove(); });
+        }
+        function updateQR(el) { const r = new FileReader(); r.onload = e => db.ref("admin/qr").set(e.target.result); r.readAsDataURL(el.files[0]); }
+    </script>
+</body>
+</html>
